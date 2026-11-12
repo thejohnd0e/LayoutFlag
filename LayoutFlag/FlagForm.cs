@@ -12,9 +12,13 @@ public class FlagForm : Form
     private readonly Image _flagEn;
     private readonly Image _flagUnknown;
     private FlagId _current = FlagId.Unknown;
+    private readonly AppSettings _settings;
+    private bool _restoringPosition;
 
     public FlagForm()
     {
+        _settings = AppSettings.Load();
+
         _flagRu = LoadFlag("russia");
         _flagEn = LoadFlag("usa");
         _flagUnknown = LoadFlag("unknown");
@@ -25,6 +29,7 @@ public class FlagForm : Form
         StartPosition = FormStartPosition.Manual;
         Size = new Size(56, 42);
         BackColor = Color.FromArgb(30, 30, 30);
+        Location = DefaultOrSavedLocation();
 
         _box.Dock = DockStyle.Fill;
         _box.SizeMode = PictureBoxSizeMode.Zoom;
@@ -36,6 +41,20 @@ public class FlagForm : Form
         _timer.Tick += (s, e) => PollLayout();
         _timer.Start();
     }
+
+    private Point DefaultOrSavedLocation()
+    {
+        var area = Screen.PrimaryScreen?.WorkingArea ?? Screen.FromPoint(Cursor.Position).WorkingArea;
+        var loc = _settings.Location;
+        if (loc == Point.Empty || !IsOnScreen(loc))
+        {
+            loc = new Point(area.Right - Width - 16, area.Bottom - Height - 16);
+        }
+        return loc;
+    }
+
+    private bool IsOnScreen(Point loc) =>
+        Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(new Rectangle(loc, Size)));
 
     protected override CreateParams CreateParams
     {
@@ -94,10 +113,46 @@ public class FlagForm : Form
     private void ShowContextMenu()
     {
         var menu = new ContextMenuStrip();
+        var auto = new ToolStripMenuItem("Автозапуск")
+        {
+            Checked = Shortcut.AutostartEnabled(),
+            CheckOnClick = true
+        };
+        auto.Click += (s, e) =>
+        {
+            Shortcut.ToggleAutostart(auto.Checked);
+            _settings.AutoStart = auto.Checked;
+        };
         var exit = new ToolStripMenuItem("Выход");
         exit.Click += (s, e) => Close();
+        menu.Items.Add(auto);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exit);
         menu.Show(Cursor.Position);
+    }
+
+    protected override void OnLocationChanged(EventArgs e)
+    {
+        base.OnLocationChanged(e);
+        if (_restoringPosition) return;
+        // клэмп в видимую область: плашку нельзя утащить за экран
+        var loc = Location;
+        var area = Screen.FromPoint(loc).WorkingArea;
+        int x = Math.Clamp(loc.X, area.Left - Width + 40, area.Right - 40);
+        int y = Math.Clamp(loc.Y, area.Top - Height + 20, area.Bottom - 20);
+        if (x != loc.X || y != loc.Y)
+        {
+            _restoringPosition = true;
+            Location = new Point(x, y);
+            _restoringPosition = false;
+        }
+        _settings.Location = Location;
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        _settings.Save();
+        base.OnFormClosing(e);
     }
 
     private static Image LoadFlag(string name)
