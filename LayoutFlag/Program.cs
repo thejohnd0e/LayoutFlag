@@ -22,7 +22,7 @@ static class Program
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new FlagForm());
+        Application.Run(new TrayAppContext());
         GC.KeepAlive(_mutex);
     }
 }

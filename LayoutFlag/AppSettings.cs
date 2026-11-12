@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Text.Json;
@@ -28,7 +29,14 @@ public enum BadgeSize
 
 public class AppSettings
 {
+    public const int MaxBadges = 3;
+
+    public int BadgeCount { get; set; } = 1;
+    public List<Point> Locations { get; set; } = new();
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Point? Location { get; set; }
+
     public BadgeMode Mode { get; set; } = BadgeMode.Flags;
     public BadgeShape Shape { get; set; } = BadgeShape.Rounded;
     public BadgeSize BadgeSize { get; set; } = BadgeSize.Medium;
@@ -52,6 +60,16 @@ public class AppSettings
         {
             if (!File.Exists(path)) return new AppSettings();
             var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), JsonOpts) ?? new AppSettings();
+            loaded.BadgeCount = Math.Clamp(loaded.BadgeCount, 1, MaxBadges);
+            loaded.Locations ??= new List<Point>();
+
+            // Миграция старого формата с одиночной точкой Location
+            if (loaded.Locations.Count == 0 && loaded.Location is not null)
+            {
+                loaded.Locations.Add(loaded.Location.Value);
+            }
+            loaded.Location = null;
+
             if (!Enum.IsDefined(loaded.Mode)) loaded.Mode = BadgeMode.Flags;
             if (!Enum.IsDefined(loaded.Shape)) loaded.Shape = BadgeShape.Rounded;
             if (!Enum.IsDefined(loaded.BadgeSize)) loaded.BadgeSize = BadgeSize.Medium;
@@ -69,6 +87,8 @@ public class AppSettings
     {
         try
         {
+            Location = null;
+            BadgeCount = Math.Clamp(BadgeCount, 1, MaxBadges);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOpts));
         }

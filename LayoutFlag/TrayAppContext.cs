@@ -6,16 +6,22 @@ using System.Windows.Forms;
 
 namespace LayoutFlag;
 
-public class FlagForm : Form
+public class TrayAppContext : ApplicationContext
 {
-    private readonly System.Windows.Forms.Timer _timer = new();
-    private FlagId _current = FlagId.Unknown;
     private readonly AppSettings _settings;
-    private bool _restoringPosition;
+    private readonly System.Windows.Forms.Timer _pollTimer = new();
+    private readonly System.Windows.Forms.Timer _saveDebounceTimer = new();
     private readonly ContextMenuStrip _menu;
     private readonly NotifyIcon _tray;
     private readonly Dictionary<FlagId, (Icon Icon, IntPtr Handle)> _trayIcons = new();
+    private readonly List<BadgeWindow> _windows = new();
 
+    private FlagId _current = FlagId.Unknown;
+    private bool _disposed;
+
+    private ToolStripMenuItem _count1Item = null!;
+    private ToolStripMenuItem _count2Item = null!;
+    private ToolStripMenuItem _count3Item = null!;
     private ToolStripMenuItem _modeFlagsItem = null!;
     private ToolStripMenuItem _modeColorItem = null!;
     private ToolStripMenuItem _shapeRoundedItem = null!;
@@ -26,24 +32,12 @@ public class FlagForm : Form
     private ToolStripMenuItem _sizeLargeItem = null!;
     private ToolStripMenuItem _autostartItem = null!;
 
-    public FlagForm()
+    public TrayAppContext()
     {
         _settings = AppSettings.Load();
 
-        FormBorderStyle = FormBorderStyle.None;
-        TopMost = true;
-        ShowInTaskbar = false;
-        StartPosition = FormStartPosition.Manual;
-
-        Size = GetScaledBadgeSize();
-        Location = DefaultOrSavedLocation();
-
         _menu = BuildContextMenu();
         _menu.Opening += (s, e) => SyncMenuChecks();
-
-        _timer.Interval = 100;
-        _timer.Tick += (s, e) => PollLayout();
-        _timer.Start();
 
         _tray = new NotifyIcon
         {
@@ -54,74 +48,19 @@ public class FlagForm : Form
         RebuildTrayIcons();
         _tray.DoubleClick += (s, e) => Restart();
 
+        _saveDebounceTimer.Interval = 500;
+        _saveDebounceTimer.Tick += (s, e) =>
+        {
+            _saveDebounceTimer.Stop();
+            _settings.Save();
+        };
+
+        SyncWindowCount();
         PollLayout();
-    }
 
-    private Size GetScaledBadgeSize()
-    {
-        var logical = BadgeGeometry.GetPixelSize(_settings.Shape, _settings.BadgeSize);
-        float dpiScale = DeviceDpi / 96f;
-        return new Size(
-            Math.Max(1, (int)Math.Round(logical.Width * dpiScale)),
-            Math.Max(1, (int)Math.Round(logical.Height * dpiScale)));
-    }
-
-    private Point DefaultOrSavedLocation()
-    {
-        var area = Screen.PrimaryScreen?.WorkingArea ?? Screen.FromPoint(Cursor.Position).WorkingArea;
-        var loc = _settings.Location;
-        if (loc is null || !IsOnScreen(loc.Value))
-        {
-            loc = new Point(area.Right - Width - 16, area.Bottom - Height - 16);
-        }
-        return loc.Value;
-    }
-
-    private bool IsOnScreen(Point loc) =>
-        Screen.AllScreens.Any(s => s.Bounds.IntersectsWith(new Rectangle(loc, Size)));
-
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            var cp = base.CreateParams;
-            // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED (попиксельная альфа без лесенки Region)
-            cp.ExStyle |= 0x8000000 | 0x80 | 0x80000;
-            return cp;
-        }
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        ApplyAppearance();
-    }
-
-    protected override void OnDpiChanged(DpiChangedEventArgs e)
-    {
-        base.OnDpiChanged(e);
-        ApplyAppearance();
-    }
-
-    protected override void OnMouseDown(MouseEventArgs e)
-    {
-        if (e.Button == MouseButtons.Left)
-        {
-            // drag без активации: стандартный move через non-client area
-            NativeMethods.ReleaseCapture();
-            NativeMethods.SendMessage(Handle, NativeMethods.WM_NCLBUTTONDOWN, (IntPtr)NativeMethods.HTCAPTION, IntPtr.Zero);
-        }
-        base.OnMouseDown(e);
-    }
-
-    protected override void OnMouseClick(MouseEventArgs e)
-    {
-        if (e.Button == MouseButtons.Right)
-        {
-            SyncMenuChecks();
-            _menu.Show(Cursor.Position);
-        }
-        base.OnMouseClick(e);
+        _pollTimer.Interval = 100;
+        _pollTimer.Tick += (s, e) => PollLayout();
+        _pollTimer.Start();
     }
 
     private void PollLayout()
@@ -138,73 +77,79 @@ public class FlagForm : Form
         if (flag != _current)
         {
             _current = flag;
-            RenderBadgeToLayeredWindow();
+            foreach (var win in _windows)
+            {
+                win.SetLayout(_current);
+            }
             UpdateTrayIcon();
         }
     }
 
-    private void ApplyAppearance()
+    private void SyncWindowCount()
     {
-        _restoringPosition = true;
-        try
+        int target = Math.Clamp(_settings.BadgeCount, 1, AppSettings.MaxBadges);
+        var defaultSize = BadgeGeometry.GetPixelSize(_settings.Shape, _settings.BadgeSize);
+        var workingAreas = Screen.AllScreens.Select(s => s.WorkingArea).ToArray();
+
+        while (_windows.Count < target)
         {
-            Size = GetScaledBadgeSize();
-            ClampLocation();
-        }
-        finally
-        {
-            _restoringPosition = false;
-        }
+            int idx = _windows.Count;
+            var placedSoFar = _windows.Select(w => w.Location).ToList();
 
-        _settings.Location = Location;
-        RenderBadgeToLayeredWindow();
-    }
-
-    private void RenderBadgeToLayeredWindow()
-    {
-        if (!IsHandleCreated) return;
-
-        using var bmp = BadgeRenderer.Render(_current, _settings.Mode, _settings.Shape, Width, Height, clipCorners: true);
-        UpdateLayeredBitmap(bmp);
-    }
-
-    private void UpdateLayeredBitmap(Bitmap bmp)
-    {
-        IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
-        IntPtr memDc = NativeMethods.CreateCompatibleDC(screenDc);
-        IntPtr hBitmap = IntPtr.Zero;
-        IntPtr oldBitmap = IntPtr.Zero;
-
-        try
-        {
-            hBitmap = bmp.GetHbitmap(Color.FromArgb(0));
-            oldBitmap = NativeMethods.SelectObject(memDc, hBitmap);
-
-            var size = new NativeMethods.SIZE(bmp.Width, bmp.Height);
-            var pointSource = new NativeMethods.POINT(0, 0);
-            var topPos = new NativeMethods.POINT(Left, Top);
-            var blend = new NativeMethods.BLENDFUNCTION
+            Point loc;
+            if (idx < _settings.Locations.Count && IsOnScreen(_settings.Locations[idx], defaultSize))
             {
-                BlendOp = NativeMethods.AC_SRC_OVER,
-                BlendFlags = 0,
-                SourceConstantAlpha = 255,
-                AlphaFormat = NativeMethods.AC_SRC_ALPHA
-            };
-
-            NativeMethods.UpdateLayeredWindow(
-                Handle, screenDc, ref topPos, ref size,
-                memDc, ref pointSource, 0, ref blend, NativeMethods.ULW_ALPHA);
-        }
-        finally
-        {
-            NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
-            if (hBitmap != IntPtr.Zero)
-            {
-                NativeMethods.SelectObject(memDc, oldBitmap);
-                NativeMethods.DeleteObject(hBitmap);
+                loc = _settings.Locations[idx];
             }
-            NativeMethods.DeleteDC(memDc);
+            else
+            {
+                loc = BadgePlacement.GetDefaultLocation(idx, defaultSize, workingAreas, placedSoFar);
+                if (idx < _settings.Locations.Count)
+                {
+                    _settings.Locations[idx] = loc;
+                }
+                else
+                {
+                    _settings.Locations.Add(loc);
+                }
+            }
+
+            var win = new BadgeWindow(idx, loc, _current, _settings.Mode, _settings.Shape, _settings.BadgeSize);
+            win.Moved += OnWindowMoved;
+            win.ContextMenuRequested += (w, pt) =>
+            {
+                SyncMenuChecks();
+                _menu.Show(pt);
+            };
+            _windows.Add(win);
+            win.Show();
         }
+
+        while (_windows.Count > target)
+        {
+            int last = _windows.Count - 1;
+            var win = _windows[last];
+            _windows.RemoveAt(last);
+            win.Moved -= OnWindowMoved;
+            win.Close();
+            win.Dispose();
+        }
+    }
+
+    private static bool IsOnScreen(Point loc, Size size) =>
+        Screen.AllScreens.Any(s => s.Bounds.IntersectsWith(new Rectangle(loc, size)));
+
+    private void OnWindowMoved(BadgeWindow win)
+    {
+        while (_settings.Locations.Count <= win.Index)
+        {
+            _settings.Locations.Add(win.Location);
+        }
+        _settings.Locations[win.Index] = win.Location;
+
+        // Отложенное сохранение, чтобы не дёргать диск на каждый пиксель перетаскивания
+        _saveDebounceTimer.Stop();
+        _saveDebounceTimer.Start();
     }
 
     private void RebuildTrayIcons()
@@ -243,15 +188,15 @@ public class FlagForm : Form
         };
     }
 
-    private void Restart()
-    {
-        _settings.Save();
-        Application.Restart();
-    }
-
     private ContextMenuStrip BuildContextMenu()
     {
         var menu = new ContextMenuStrip();
+
+        var countMenu = new ToolStripMenuItem("Плашек");
+        _count1Item = new ToolStripMenuItem("1", null, (s, e) => SetBadgeCount(1));
+        _count2Item = new ToolStripMenuItem("2", null, (s, e) => SetBadgeCount(2));
+        _count3Item = new ToolStripMenuItem("3", null, (s, e) => SetBadgeCount(3));
+        countMenu.DropDownItems.AddRange(new ToolStripItem[] { _count1Item, _count2Item, _count3Item });
 
         var modeMenu = new ToolStripMenuItem("Вид");
         _modeFlagsItem = new ToolStripMenuItem("Флаги", null, (s, e) => SetMode(BadgeMode.Flags));
@@ -281,10 +226,11 @@ public class FlagForm : Form
         _autostartItem.Click += (s, e) => Shortcut.ToggleAutostart(_autostartItem.Checked);
 
         var exit = new ToolStripMenuItem("Выход");
-        exit.Click += (s, e) => Close();
+        exit.Click += (s, e) => ExitApp();
 
         menu.Items.AddRange(new ToolStripItem[]
         {
+            countMenu,
             modeMenu,
             shapeMenu,
             sizeMenu,
@@ -299,6 +245,10 @@ public class FlagForm : Form
 
     private void SyncMenuChecks()
     {
+        _count1Item.Checked = _settings.BadgeCount == 1;
+        _count2Item.Checked = _settings.BadgeCount == 2;
+        _count3Item.Checked = _settings.BadgeCount == 3;
+
         _modeFlagsItem.Checked = _settings.Mode == BadgeMode.Flags;
         _modeColorItem.Checked = _settings.Mode == BadgeMode.Color;
 
@@ -313,11 +263,18 @@ public class FlagForm : Form
         _autostartItem.Checked = Shortcut.AutostartEnabled();
     }
 
+    private void SetBadgeCount(int count)
+    {
+        _settings.BadgeCount = Math.Clamp(count, 1, AppSettings.MaxBadges);
+        SyncWindowCount();
+        _settings.Save();
+    }
+
     private void SetMode(BadgeMode mode)
     {
         _settings.Mode = mode;
         _settings.Save();
-        RenderBadgeToLayeredWindow();
+        ApplyAppearanceToAll();
         RebuildTrayIcons();
     }
 
@@ -325,7 +282,7 @@ public class FlagForm : Form
     {
         _settings.Shape = shape;
         _settings.Save();
-        ApplyAppearance();
+        ApplyAppearanceToAll();
         RebuildTrayIcons();
     }
 
@@ -333,41 +290,56 @@ public class FlagForm : Form
     {
         _settings.BadgeSize = size;
         _settings.Save();
-        ApplyAppearance();
+        ApplyAppearanceToAll();
     }
 
-    protected override void OnLocationChanged(EventArgs e)
+    private void ApplyAppearanceToAll()
     {
-        base.OnLocationChanged(e);
-        if (_restoringPosition) return;
-        _restoringPosition = true;
-        try
+        foreach (var win in _windows)
         {
-            ClampLocation();
-        }
-        finally
-        {
-            _restoringPosition = false;
-        }
-        _settings.Location = Location;
-    }
-
-    private void ClampLocation()
-    {
-        var loc = Location;
-        var area = Screen.FromPoint(loc).Bounds;
-        int marginX = Math.Min(Width, 20);
-        int marginY = Math.Min(Height, 20);
-        int x = Math.Clamp(loc.X, area.Left - Width + marginX, area.Right - marginX);
-        int y = Math.Clamp(loc.Y, area.Top - Height + marginY, area.Bottom - marginY);
-        if (x != loc.X || y != loc.Y)
-        {
-            Location = new Point(x, y);
+            win.SetAppearance(_settings.Mode, _settings.Shape, _settings.BadgeSize);
         }
     }
 
-    protected override void OnFormClosing(FormClosingEventArgs e)
+    private void Restart()
     {
+        CleanupBeforeExit();
+        Application.Restart();
+    }
+
+    private void ExitApp()
+    {
+        CleanupBeforeExit();
+        ExitThread();
+    }
+
+    private void CleanupBeforeExit()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        _pollTimer.Stop();
+        _pollTimer.Dispose();
+        _saveDebounceTimer.Stop();
+        _saveDebounceTimer.Dispose();
+
+        for (int i = 0; i < _windows.Count; i++)
+        {
+            if (i < _settings.Locations.Count)
+                _settings.Locations[i] = _windows[i].Location;
+            else
+                _settings.Locations.Add(_windows[i].Location);
+        }
+        _settings.Save();
+
+        foreach (var win in _windows)
+        {
+            win.Moved -= OnWindowMoved;
+            win.Close();
+            win.Dispose();
+        }
+        _windows.Clear();
+
         _tray.Visible = false;
         _tray.Icon = null;
         _tray.Dispose();
@@ -378,7 +350,14 @@ public class FlagForm : Form
         }
         _trayIcons.Clear();
         _menu.Dispose();
-        _settings.Save();
-        base.OnFormClosing(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            CleanupBeforeExit();
+        }
+        base.Dispose(disposing);
     }
 }
