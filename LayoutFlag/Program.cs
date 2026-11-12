@@ -13,7 +13,12 @@ static class Program
         _mutex = new Mutex(true, @"Local\LayoutFlagSingleInstance", out bool createdNew);
         if (!createdNew)
         {
-            return; // уже запущено — тихо выходим
+            // Application.Restart запускает новый процесс раньше смерти старого —
+            // даём старому до 3 секунд отпустить Mutex, иначе рестарт молча не сработает
+            if (!_mutex.WaitOne(TimeSpan.FromSeconds(3)))
+            {
+                return; // действительно запущен другой живой экземпляр
+            }
         }
 
         ApplicationConfiguration.Initialize();

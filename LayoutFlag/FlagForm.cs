@@ -15,6 +15,7 @@ public class FlagForm : Form
     private readonly AppSettings _settings;
     private bool _restoringPosition;
     private ContextMenuStrip? _menu;
+    private readonly NotifyIcon _tray;
 
     public FlagForm()
     {
@@ -45,6 +46,32 @@ public class FlagForm : Form
         _timer.Interval = 100;
         _timer.Tick += (s, e) => PollLayout();
         _timer.Start();
+
+        _tray = new NotifyIcon
+        {
+            Icon = MakeTrayIcon(),
+            Text = "LayoutFlag — индикатор раскладки",
+            Visible = true,
+            ContextMenuStrip = BuildContextMenu()
+        };
+        _tray.DoubleClick += (s, e) => Restart();
+    }
+
+    private static Icon MakeTrayIcon()
+    {
+        using var bmp = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(bmp);
+        g.Clear(Color.FromArgb(30, 30, 30));
+        int third = 16 / 3;
+        using (var brush = new SolidBrush(Color.RoyalBlue)) g.FillRectangle(brush, 0, third, 16, third);
+        using (var brush = new SolidBrush(Color.Red)) g.FillRectangle(brush, 0, 2 * third, 16, 16 - 2 * third);
+        return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    private void Restart()
+    {
+        _settings.Save();
+        Application.Restart(); // закрывает форму и запускает новый экземпляр
     }
 
     private Point DefaultOrSavedLocation()
@@ -117,6 +144,8 @@ public class FlagForm : Form
     private ContextMenuStrip BuildContextMenu()
     {
         var menu = new ContextMenuStrip();
+        var restart = new ToolStripMenuItem("Перезапустить");
+        restart.Click += (s, e) => Restart();
         var auto = new ToolStripMenuItem("Автозапуск")
         {
             Checked = Shortcut.AutostartEnabled(),
@@ -125,6 +154,7 @@ public class FlagForm : Form
         auto.Click += (s, e) => Shortcut.ToggleAutostart(auto.Checked);
         var exit = new ToolStripMenuItem("Выход");
         exit.Click += (s, e) => Close();
+        menu.Items.Add(restart);
         menu.Items.Add(auto);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exit);
@@ -151,6 +181,8 @@ public class FlagForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        _tray.Visible = false;
+        _tray.Dispose();
         _settings.Save();
         base.OnFormClosing(e);
     }
