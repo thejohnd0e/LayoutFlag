@@ -22,6 +22,7 @@ public class AppSettingsTests
         Assert.Equal(BadgeMode.Flags, s.Mode);
         Assert.Equal(BadgeShape.Rounded, s.Shape);
         Assert.Equal(BadgeSize.Medium, s.BadgeSize);
+        Assert.Equal(UiLanguage.Auto, s.Language);
     }
 
     [Fact]
@@ -33,6 +34,7 @@ public class AppSettingsTests
         Assert.Equal(BadgeMode.Flags, s.Mode);
         Assert.Equal(BadgeShape.Rounded, s.Shape);
         Assert.Equal(BadgeSize.Medium, s.BadgeSize);
+        Assert.Equal(UiLanguage.Auto, s.Language);
     }
 
     [Fact]
@@ -46,6 +48,7 @@ public class AppSettingsTests
         Assert.Equal(BadgeMode.Flags, s.Mode);
         Assert.Equal(BadgeShape.Rounded, s.Shape);
         Assert.Equal(BadgeSize.Medium, s.BadgeSize);
+        Assert.Equal(UiLanguage.Auto, s.Language);
     }
 
     [Theory]
@@ -71,7 +74,8 @@ public class AppSettingsTests
             Locations = new List<Point> { new(11, 22), new(1950, 500) },
             Mode = BadgeMode.Color,
             Shape = BadgeShape.Circle,
-            BadgeSize = BadgeSize.Large
+            BadgeSize = BadgeSize.Large,
+            Language = UiLanguage.En
         };
         s.Save(path);
         var loaded = AppSettings.Load(path);
@@ -80,5 +84,6 @@ public class AppSettingsTests
         Assert.Equal(BadgeMode.Color, loaded.Mode);
         Assert.Equal(BadgeShape.Circle, loaded.Shape);
         Assert.Equal(BadgeSize.Large, loaded.BadgeSize);
+        Assert.Equal(UiLanguage.En, loaded.Language);
     }
 }

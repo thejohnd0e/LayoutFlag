@@ -19,25 +19,42 @@ public class TrayAppContext : ApplicationContext
     private FlagId _current = FlagId.Unknown;
     private bool _disposed;
 
+    private ToolStripMenuItem _countMenu = null!;
     private ToolStripMenuItem _count1Item = null!;
     private ToolStripMenuItem _count2Item = null!;
     private ToolStripMenuItem _count3Item = null!;
     private ToolStripMenuItem _count4Item = null!;
+    private ToolStripMenuItem _modeMenu = null!;
     private ToolStripMenuItem _modeFlagsItem = null!;
     private ToolStripMenuItem _modeColorItem = null!;
+    private ToolStripMenuItem _shapeMenu = null!;
     private ToolStripMenuItem _shapeRoundedItem = null!;
     private ToolStripMenuItem _shapeRectItem = null!;
     private ToolStripMenuItem _shapeCircleItem = null!;
+    private ToolStripMenuItem _sizeMenu = null!;
     private ToolStripMenuItem _sizeSmallItem = null!;
     private ToolStripMenuItem _sizeMediumItem = null!;
     private ToolStripMenuItem _sizeLargeItem = null!;
+    private ToolStripMenuItem _langMenu = null!;
+    private ToolStripMenuItem _langAutoItem = null!;
+    private ToolStripMenuItem _langRuItem = null!;
+    private ToolStripMenuItem _langEnItem = null!;
+    private ToolStripMenuItem _restartItem = null!;
     private ToolStripMenuItem _autostartItem = null!;
+    private ToolStripMenuItem _exitItem = null!;
 
-    public TrayAppContext()
+    public TrayAppContext(UiLanguage? initialLanguageHint = null)
     {
+        bool isFirstRun = !AppSettings.DefaultFileExists();
         _settings = AppSettings.Load();
+        if (isFirstRun && initialLanguageHint is not null)
+        {
+            _settings.Language = initialLanguageHint.Value;
+            _settings.Save();
+        }
 
         _menu = BuildContextMenu();
+        ApplyMenuLanguage();
         _menu.Opening += (s, e) => SyncMenuChecks();
 
         _tray = new NotifyIcon
@@ -193,56 +210,87 @@ public class TrayAppContext : ApplicationContext
     {
         var menu = new ContextMenuStrip();
 
-        var countMenu = new ToolStripMenuItem("Плашек");
+        _countMenu = new ToolStripMenuItem();
         _count1Item = new ToolStripMenuItem("1", null, (s, e) => SetBadgeCount(1));
         _count2Item = new ToolStripMenuItem("2", null, (s, e) => SetBadgeCount(2));
         _count3Item = new ToolStripMenuItem("3", null, (s, e) => SetBadgeCount(3));
         _count4Item = new ToolStripMenuItem("4", null, (s, e) => SetBadgeCount(4));
-        countMenu.DropDownItems.AddRange(new ToolStripItem[] { _count1Item, _count2Item, _count3Item, _count4Item });
+        _countMenu.DropDownItems.AddRange(new ToolStripItem[] { _count1Item, _count2Item, _count3Item, _count4Item });
 
-        var modeMenu = new ToolStripMenuItem("Вид");
-        _modeFlagsItem = new ToolStripMenuItem("Флаги", null, (s, e) => SetMode(BadgeMode.Flags));
-        _modeColorItem = new ToolStripMenuItem("Цвет", null, (s, e) => SetMode(BadgeMode.Color));
-        modeMenu.DropDownItems.AddRange(new ToolStripItem[] { _modeFlagsItem, _modeColorItem });
+        _modeMenu = new ToolStripMenuItem();
+        _modeFlagsItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetMode(BadgeMode.Flags));
+        _modeColorItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetMode(BadgeMode.Color));
+        _modeMenu.DropDownItems.AddRange(new ToolStripItem[] { _modeFlagsItem, _modeColorItem });
 
-        var shapeMenu = new ToolStripMenuItem("Форма");
-        _shapeRoundedItem = new ToolStripMenuItem("Скруглённая", null, (s, e) => SetShape(BadgeShape.Rounded));
-        _shapeRectItem = new ToolStripMenuItem("Прямоугольник", null, (s, e) => SetShape(BadgeShape.Rectangle));
-        _shapeCircleItem = new ToolStripMenuItem("Круг", null, (s, e) => SetShape(BadgeShape.Circle));
-        shapeMenu.DropDownItems.AddRange(new ToolStripItem[] { _shapeRoundedItem, _shapeRectItem, _shapeCircleItem });
+        _shapeMenu = new ToolStripMenuItem();
+        _shapeRoundedItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetShape(BadgeShape.Rounded));
+        _shapeRectItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetShape(BadgeShape.Rectangle));
+        _shapeCircleItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetShape(BadgeShape.Circle));
+        _shapeMenu.DropDownItems.AddRange(new ToolStripItem[] { _shapeRoundedItem, _shapeRectItem, _shapeCircleItem });
 
-        var sizeMenu = new ToolStripMenuItem("Размер");
-        _sizeSmallItem = new ToolStripMenuItem("Маленький", null, (s, e) => SetSize(BadgeSize.Small));
-        _sizeMediumItem = new ToolStripMenuItem("Средний", null, (s, e) => SetSize(BadgeSize.Medium));
-        _sizeLargeItem = new ToolStripMenuItem("Крупный", null, (s, e) => SetSize(BadgeSize.Large));
-        sizeMenu.DropDownItems.AddRange(new ToolStripItem[] { _sizeSmallItem, _sizeMediumItem, _sizeLargeItem });
+        _sizeMenu = new ToolStripMenuItem();
+        _sizeSmallItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetSize(BadgeSize.Small));
+        _sizeMediumItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetSize(BadgeSize.Medium));
+        _sizeLargeItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetSize(BadgeSize.Large));
+        _sizeMenu.DropDownItems.AddRange(new ToolStripItem[] { _sizeSmallItem, _sizeMediumItem, _sizeLargeItem });
 
-        var restart = new ToolStripMenuItem("Перезапустить");
-        restart.Click += (s, e) => Restart();
+        _langMenu = new ToolStripMenuItem();
+        _langAutoItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetLanguage(UiLanguage.Auto));
+        _langRuItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetLanguage(UiLanguage.Ru));
+        _langEnItem = new ToolStripMenuItem(string.Empty, null, (s, e) => SetLanguage(UiLanguage.En));
+        _langMenu.DropDownItems.AddRange(new ToolStripItem[] { _langAutoItem, _langRuItem, _langEnItem });
 
-        _autostartItem = new ToolStripMenuItem("Автозапуск")
+        _restartItem = new ToolStripMenuItem();
+        _restartItem.Click += (s, e) => Restart();
+
+        _autostartItem = new ToolStripMenuItem
         {
             Checked = Shortcut.AutostartEnabled(),
             CheckOnClick = true
         };
         _autostartItem.Click += (s, e) => Shortcut.ToggleAutostart(_autostartItem.Checked);
 
-        var exit = new ToolStripMenuItem("Выход");
-        exit.Click += (s, e) => ExitApp();
+        _exitItem = new ToolStripMenuItem();
+        _exitItem.Click += (s, e) => ExitApp();
 
         menu.Items.AddRange(new ToolStripItem[]
         {
-            countMenu,
-            modeMenu,
-            shapeMenu,
-            sizeMenu,
+            _countMenu,
+            _modeMenu,
+            _shapeMenu,
+            _sizeMenu,
+            _langMenu,
             new ToolStripSeparator(),
-            restart,
+            _restartItem,
             _autostartItem,
             new ToolStripSeparator(),
-            exit
+            _exitItem
         });
         return menu;
+    }
+
+    private void ApplyMenuLanguage()
+    {
+        var t = Strings.For(_settings.Language);
+        _countMenu.Text = t.Badges;
+        _modeMenu.Text = t.Style;
+        _modeFlagsItem.Text = t.Flags;
+        _modeColorItem.Text = t.Color;
+        _shapeMenu.Text = t.Shape;
+        _shapeRoundedItem.Text = t.Rounded;
+        _shapeRectItem.Text = t.Rectangle;
+        _shapeCircleItem.Text = t.Circle;
+        _sizeMenu.Text = t.Size;
+        _sizeSmallItem.Text = t.Small;
+        _sizeMediumItem.Text = t.Medium;
+        _sizeLargeItem.Text = t.Large;
+        _langMenu.Text = t.Language;
+        _langAutoItem.Text = t.LangAuto;
+        _langRuItem.Text = t.LangRu;
+        _langEnItem.Text = t.LangEn;
+        _restartItem.Text = t.Restart;
+        _autostartItem.Text = t.Autostart;
+        _exitItem.Text = t.Exit;
     }
 
     private void SyncMenuChecks()
@@ -263,7 +311,18 @@ public class TrayAppContext : ApplicationContext
         _sizeMediumItem.Checked = _settings.BadgeSize == BadgeSize.Medium;
         _sizeLargeItem.Checked = _settings.BadgeSize == BadgeSize.Large;
 
+        _langAutoItem.Checked = _settings.Language == UiLanguage.Auto;
+        _langRuItem.Checked = _settings.Language == UiLanguage.Ru;
+        _langEnItem.Checked = _settings.Language == UiLanguage.En;
+
         _autostartItem.Checked = Shortcut.AutostartEnabled();
+    }
+
+    private void SetLanguage(UiLanguage language)
+    {
+        _settings.Language = language;
+        _settings.Save();
+        ApplyMenuLanguage();
     }
 
     private void SetBadgeCount(int count)

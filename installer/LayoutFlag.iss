@@ -26,32 +26,43 @@ CloseApplications=yes
 CloseApplicationsFilter={#MyAppExeName}
 RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
-; Не требовать прав администратора для per-user установки
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 AllowNoIcons=yes
 
 [Languages]
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
+[CustomMessages]
+russian.AutostartGroup=Автозапуск:
+russian.AutostartTask=Запускать {#MyAppName} при входе в Windows
+russian.UninstallShortcut=Удалить {#MyAppName}
+russian.LaunchApp=Запустить {#MyAppName}
+
+english.AutostartGroup=Startup:
+english.AutostartTask=Run {#MyAppName} when Windows starts
+english.UninstallShortcut=Uninstall {#MyAppName}
+english.LaunchApp=Launch {#MyAppName}
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "autostart"; Description: "Запускать LayoutFlag при входе в Windows"; GroupDescription: "Автозапуск:"
+Name: "autostart"; Description: "{cm:AutostartTask}"; GroupDescription: "{cm:AutostartGroup}"
 
 [Files]
 Source: "publish\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
-Name: "{group}\Удалить {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{group}\{cm:UninstallShortcut}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Запустить {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--lang={language}"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
+Type: filesandordirs; Name: "{userappdata}\LayoutFlag"
 Type: filesandordirs; Name: "{localappdata}\LayoutFlag"

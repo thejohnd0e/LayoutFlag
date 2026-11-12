@@ -27,6 +27,13 @@ public enum BadgeSize
     Large
 }
 
+public enum UiLanguage
+{
+    Auto,
+    Ru,
+    En
+}
+
 public class AppSettings
 {
     public const int MaxBadges = 4;
@@ -40,6 +47,7 @@ public class AppSettings
     public BadgeMode Mode { get; set; } = BadgeMode.Flags;
     public BadgeShape Shape { get; set; } = BadgeShape.Rounded;
     public BadgeSize BadgeSize { get; set; } = BadgeSize.Medium;
+    public UiLanguage Language { get; set; } = UiLanguage.Auto;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -51,6 +59,8 @@ public class AppSettings
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "LayoutFlag", "settings.json");
+
+    internal static bool DefaultFileExists() => File.Exists(DefaultPath);
 
     public static AppSettings Load() => Load(DefaultPath);
 
@@ -73,6 +83,7 @@ public class AppSettings
             if (!Enum.IsDefined(loaded.Mode)) loaded.Mode = BadgeMode.Flags;
             if (!Enum.IsDefined(loaded.Shape)) loaded.Shape = BadgeShape.Rounded;
             if (!Enum.IsDefined(loaded.BadgeSize)) loaded.BadgeSize = BadgeSize.Medium;
+            if (!Enum.IsDefined(loaded.Language)) loaded.Language = UiLanguage.Auto;
             return loaded;
         }
         catch
