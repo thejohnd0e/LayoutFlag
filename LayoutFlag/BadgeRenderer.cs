@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 
 namespace LayoutFlag;
 
@@ -12,45 +13,63 @@ public static class BadgeRenderer
         int sw = width * scale;
         int sh = height * scale;
 
-        using var hiRes = new Bitmap(sw, sh);
+        // Рисуем содержимое на полноразмерном холсте, затем заливаем форму через TextureBrush + FillPath,
+        // потому что GDI+ SetClip режет без антиалиасинга, а FillPath даёт идеально гладкий край.
+        using var content = new Bitmap(sw, sh, PixelFormat.Format32bppPArgb);
+        using (var gc = Graphics.FromImage(content))
+        {
+            gc.SmoothingMode = SmoothingMode.AntiAlias;
+            gc.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            gc.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+            if (mode == BadgeMode.Color)
+            {
+                DrawSolidColor(gc, flag, sw, sh);
+            }
+            else
+            {
+                DrawFlag(gc, flag, sw, sh);
+            }
+        }
+
+        using var hiRes = new Bitmap(sw, sh, PixelFormat.Format32bppPArgb);
         using (var g = Graphics.FromImage(hiRes))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.Clear(Color.Transparent);
+
+            float inset = clipCorners
+                ? (shape == BadgeShape.Rectangle ? scale * 0.5f : scale * 1.25f)
+                : 0f;
 
             if (clipCorners)
             {
-                g.Clear(Color.Transparent);
-                using var clipPath = BadgeGeometry.CreateShapePath(shape, sw, sh, inset: scale * 0.5f);
-                g.SetClip(clipPath);
-            }
+                using var shapePath = BadgeGeometry.CreateShapePath(shape, sw, sh, inset);
+                using var tex = new TextureBrush(content, WrapMode.Clamp);
+                g.FillPath(tex, shapePath);
 
-            if (mode == BadgeMode.Color)
-            {
-                DrawSolidColor(g, flag, sw, sh);
+                // Мягкая тонкая окантовка по самому краю, чтобы светлые полосы флага не терялись на белом фоне
+                using var borderPen = new Pen(Color.FromArgb(60, 0, 0, 0), scale * 1.0f);
+                g.DrawPath(borderPen, shapePath);
             }
             else
             {
-                DrawFlag(g, flag, sw, sh);
+                g.DrawImageUnscaled(content, 0, 0);
+                using var borderPath = BadgeGeometry.CreateShapePath(shape, sw, sh, inset: scale * 0.6f);
+                using var borderPen = new Pen(Color.FromArgb(75, 0, 0, 0), scale * 1.0f);
+                g.DrawPath(borderPen, borderPath);
             }
-
-            if (clipCorners)
-            {
-                g.ResetClip();
-            }
-
-            // Тонкая окантовка по краю формы, чтобы плашка читалась на любом фоне (и светлом, и тёмном)
-            using var borderPath = BadgeGeometry.CreateShapePath(shape, sw, sh, inset: scale * 0.6f);
-            using var borderPen = new Pen(Color.FromArgb(95, 0, 0, 0), scale * 1.2f);
-            g.DrawPath(borderPen, borderPath);
         }
 
-        var output = new Bitmap(width, height);
+        var output = new Bitmap(width, height, PixelFormat.Format32bppPArgb);
         using (var gOut = Graphics.FromImage(output))
         {
             gOut.InterpolationMode = InterpolationMode.HighQualityBicubic;
             gOut.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            gOut.CompositingQuality = CompositingQuality.HighQuality;
+            gOut.Clear(Color.Transparent);
             gOut.DrawImage(hiRes, 0, 0, width, height);
         }
 

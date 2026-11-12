@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -11,7 +12,6 @@ public class FlagForm : Form
     private FlagId _current = FlagId.Unknown;
     private readonly AppSettings _settings;
     private bool _restoringPosition;
-    private Bitmap? _badgeBitmap;
     private readonly ContextMenuStrip _menu;
     private readonly NotifyIcon _tray;
     private readonly Dictionary<FlagId, (Icon Icon, IntPtr Handle)> _trayIcons = new();
@@ -34,12 +34,9 @@ public class FlagForm : Form
         TopMost = true;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
-        DoubleBuffered = true;
 
-        // Сначала задаём размер по настройкам, чтобы DefaultOrSavedLocation верно посчитал угол
-        Size = BadgeGeometry.GetPixelSize(_settings.Shape, _settings.BadgeSize);
+        Size = GetScaledBadgeSize();
         Location = DefaultOrSavedLocation();
-        ApplyAppearance();
 
         _menu = BuildContextMenu();
         _menu.Opening += (s, e) => SyncMenuChecks();
@@ -55,10 +52,18 @@ public class FlagForm : Form
             ContextMenuStrip = _menu
         };
         RebuildTrayIcons();
-        UpdateTrayIcon();
         _tray.DoubleClick += (s, e) => Restart();
 
         PollLayout();
+    }
+
+    private Size GetScaledBadgeSize()
+    {
+        var logical = BadgeGeometry.GetPixelSize(_settings.Shape, _settings.BadgeSize);
+        float dpiScale = DeviceDpi / 96f;
+        return new Size(
+            Math.Max(1, (int)Math.Round(logical.Width * dpiScale)),
+            Math.Max(1, (int)Math.Round(logical.Height * dpiScale)));
     }
 
     private Point DefaultOrSavedLocation()
@@ -80,19 +85,22 @@ public class FlagForm : Form
         get
         {
             var cp = base.CreateParams;
-            // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW — не крадём фокус, не в taskbar/Alt+Tab
-            cp.ExStyle |= 0x8000000 | 0x80;
+            // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_LAYERED (попиксельная альфа без лесенки Region)
+            cp.ExStyle |= 0x8000000 | 0x80 | 0x80000;
             return cp;
         }
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void OnHandleCreated(EventArgs e)
     {
-        if (_badgeBitmap is not null)
-        {
-            e.Graphics.DrawImageUnscaled(_badgeBitmap, 0, 0);
-        }
-        base.OnPaint(e);
+        base.OnHandleCreated(e);
+        ApplyAppearance();
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        ApplyAppearance();
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -130,7 +138,7 @@ public class FlagForm : Form
         if (flag != _current)
         {
             _current = flag;
-            RegenerateBadge();
+            RenderBadgeToLayeredWindow();
             UpdateTrayIcon();
         }
     }
@@ -140,13 +148,7 @@ public class FlagForm : Form
         _restoringPosition = true;
         try
         {
-            Size = BadgeGeometry.GetPixelSize(_settings.Shape, _settings.BadgeSize);
-
-            using var path = BadgeGeometry.CreateShapePath(_settings.Shape, Width, Height);
-            var oldRegion = Region;
-            Region = new Region(path);
-            oldRegion?.Dispose();
-
+            Size = GetScaledBadgeSize();
             ClampLocation();
         }
         finally
@@ -155,16 +157,54 @@ public class FlagForm : Form
         }
 
         _settings.Location = Location;
-        RegenerateBadge();
+        RenderBadgeToLayeredWindow();
     }
 
-    private void RegenerateBadge()
+    private void RenderBadgeToLayeredWindow()
     {
-        var next = BadgeRenderer.Render(_current, _settings.Mode, _settings.Shape, Width, Height);
-        var prev = _badgeBitmap;
-        _badgeBitmap = next;
-        prev?.Dispose();
-        Invalidate();
+        if (!IsHandleCreated) return;
+
+        using var bmp = BadgeRenderer.Render(_current, _settings.Mode, _settings.Shape, Width, Height, clipCorners: true);
+        UpdateLayeredBitmap(bmp);
+    }
+
+    private void UpdateLayeredBitmap(Bitmap bmp)
+    {
+        IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
+        IntPtr memDc = NativeMethods.CreateCompatibleDC(screenDc);
+        IntPtr hBitmap = IntPtr.Zero;
+        IntPtr oldBitmap = IntPtr.Zero;
+
+        try
+        {
+            hBitmap = bmp.GetHbitmap(Color.FromArgb(0));
+            oldBitmap = NativeMethods.SelectObject(memDc, hBitmap);
+
+            var size = new NativeMethods.SIZE(bmp.Width, bmp.Height);
+            var pointSource = new NativeMethods.POINT(0, 0);
+            var topPos = new NativeMethods.POINT(Left, Top);
+            var blend = new NativeMethods.BLENDFUNCTION
+            {
+                BlendOp = NativeMethods.AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 255,
+                AlphaFormat = NativeMethods.AC_SRC_ALPHA
+            };
+
+            NativeMethods.UpdateLayeredWindow(
+                Handle, screenDc, ref topPos, ref size,
+                memDc, ref pointSource, 0, ref blend, NativeMethods.ULW_ALPHA);
+        }
+        finally
+        {
+            NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
+            if (hBitmap != IntPtr.Zero)
+            {
+                NativeMethods.SelectObject(memDc, oldBitmap);
+                NativeMethods.DeleteObject(hBitmap);
+            }
+            NativeMethods.DeleteDC(memDc);
+        }
     }
 
     private void RebuildTrayIcons()
@@ -277,7 +317,7 @@ public class FlagForm : Form
     {
         _settings.Mode = mode;
         _settings.Save();
-        RegenerateBadge();
+        RenderBadgeToLayeredWindow();
         RebuildTrayIcons();
     }
 
@@ -338,7 +378,6 @@ public class FlagForm : Form
         }
         _trayIcons.Clear();
         _menu.Dispose();
-        _badgeBitmap?.Dispose();
         _settings.Save();
         base.OnFormClosing(e);
     }

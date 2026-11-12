@@ -56,4 +56,22 @@ public class BadgeGeometryTests
         Assert.Equal(size, bmp.Height);
         Assert.Equal(0, bmp.GetPixel(0, 0).A);
     }
+
+    [Fact]
+    public void Render_CircleWithClippedCorners_HasPremultipliedAlphaAndAntiAliasedEdge()
+    {
+        using var bmp = BadgeRenderer.Render(FlagId.En, BadgeMode.Color, BadgeShape.Circle, 40, 40, clipCorners: true);
+        Assert.Equal(System.Drawing.Imaging.PixelFormat.Format32bppPArgb, bmp.PixelFormat);
+        Assert.Equal(0, bmp.GetPixel(0, 0).A);
+        Assert.Equal(255, bmp.GetPixel(20, 20).A);
+
+        bool hasSemiTransparentEdge = false;
+        for (int y = 0; y < bmp.Height && !hasSemiTransparentEdge; y++)
+        for (int x = 0; x < bmp.Width && !hasSemiTransparentEdge; x++)
+        {
+            byte a = bmp.GetPixel(x, y).A;
+            if (a > 0 && a < 255) hasSemiTransparentEdge = true;
+        }
+        Assert.True(hasSemiTransparentEdge, "Expected anti-aliased edge pixels for smooth circle");
+    }
 }
