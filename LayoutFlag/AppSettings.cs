@@ -7,8 +7,7 @@ namespace LayoutFlag;
 
 public class AppSettings
 {
-    public Point Location { get; set; } = Point.Empty;
-    public bool AutoStart { get; set; }
+    public Point? Location { get; set; }
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {

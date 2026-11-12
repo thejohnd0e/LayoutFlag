@@ -16,26 +16,23 @@ public class AppSettingsTests
     {
         string path = TempFile("{ this is not json !!!");
         var s = AppSettings.Load(path);
-        Assert.Equal(Point.Empty, s.Location);
-        Assert.False(s.AutoStart);
+        Assert.Null(s.Location);
     }
 
     [Fact]
     public void Load_MissingFile_ReturnsDefaults()
     {
         var s = AppSettings.Load(Path.Combine(Path.GetTempPath(), "lf_no_such_file_xyz.json"));
-        Assert.Equal(Point.Empty, s.Location);
-        Assert.False(s.AutoStart);
+        Assert.Null(s.Location);
     }
 
     [Fact]
     public void SaveThenLoad_RoundTrips()
     {
         string path = Path.Combine(Path.GetTempPath(), $"lf_{Path.GetRandomFileName()}.json");
-        var s = new AppSettings { Location = new Point(11, 22), AutoStart = true };
+        var s = new AppSettings { Location = new Point(11, 22) };
         s.Save(path);
         var loaded = AppSettings.Load(path);
         Assert.Equal(new Point(11, 22), loaded.Location);
-        Assert.True(loaded.AutoStart);
     }
 }

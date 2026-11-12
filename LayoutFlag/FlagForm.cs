@@ -14,6 +14,7 @@ public class FlagForm : Form
     private FlagId _current = FlagId.Unknown;
     private readonly AppSettings _settings;
     private bool _restoringPosition;
+    private ContextMenuStrip? _menu;
 
     public FlagForm()
     {
@@ -46,11 +47,11 @@ public class FlagForm : Form
     {
         var area = Screen.PrimaryScreen?.WorkingArea ?? Screen.FromPoint(Cursor.Position).WorkingArea;
         var loc = _settings.Location;
-        if (loc == Point.Empty || !IsOnScreen(loc))
+        if (loc is null || !IsOnScreen(loc.Value))
         {
             loc = new Point(area.Right - Width - 16, area.Bottom - Height - 16);
         }
-        return loc;
+        return loc.Value;
     }
 
     private bool IsOnScreen(Point loc) =>
@@ -112,23 +113,27 @@ public class FlagForm : Form
 
     private void ShowContextMenu()
     {
+        _menu ??= BuildContextMenu();
+        // синхронизируем галочку с реальным наличием ярлыка
+        ((ToolStripMenuItem)_menu.Items[0]!).Checked = Shortcut.AutostartEnabled();
+        _menu.Show(Cursor.Position);
+    }
+
+    private ContextMenuStrip BuildContextMenu()
+    {
         var menu = new ContextMenuStrip();
         var auto = new ToolStripMenuItem("Автозапуск")
         {
             Checked = Shortcut.AutostartEnabled(),
             CheckOnClick = true
         };
-        auto.Click += (s, e) =>
-        {
-            Shortcut.ToggleAutostart(auto.Checked);
-            _settings.AutoStart = auto.Checked;
-        };
+        auto.Click += (s, e) => Shortcut.ToggleAutostart(auto.Checked);
         var exit = new ToolStripMenuItem("Выход");
         exit.Click += (s, e) => Close();
         menu.Items.Add(auto);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exit);
-        menu.Show(Cursor.Position);
+        return menu;
     }
 
     protected override void OnLocationChanged(EventArgs e)
