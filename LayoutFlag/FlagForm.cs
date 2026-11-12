@@ -14,6 +14,7 @@ public class FlagForm : Form
     private Bitmap? _badgeBitmap;
     private readonly ContextMenuStrip _menu;
     private readonly NotifyIcon _tray;
+    private readonly Dictionary<FlagId, (Icon Icon, IntPtr Handle)> _trayIcons = new();
 
     private ToolStripMenuItem _modeFlagsItem = null!;
     private ToolStripMenuItem _modeColorItem = null!;
@@ -49,12 +50,15 @@ public class FlagForm : Form
 
         _tray = new NotifyIcon
         {
-            Icon = MakeTrayIcon(),
-            Text = "LayoutFlag — индикатор раскладки",
+            Text = "LayoutFlag",
             Visible = true,
             ContextMenuStrip = _menu
         };
+        RebuildTrayIcons();
+        UpdateTrayIcon();
         _tray.DoubleClick += (s, e) => Restart();
+
+        PollLayout();
     }
 
     private Point DefaultOrSavedLocation()
@@ -127,6 +131,7 @@ public class FlagForm : Form
         {
             _current = flag;
             RegenerateBadge();
+            UpdateTrayIcon();
         }
     }
 
@@ -162,15 +167,40 @@ public class FlagForm : Form
         Invalidate();
     }
 
-    private static Icon MakeTrayIcon()
+    private void RebuildTrayIcons()
     {
-        using var bmp = new Bitmap(16, 16);
-        using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.White);
-        int third = 16 / 3;
-        using (var brush = new SolidBrush(Color.FromArgb(0, 51, 160))) g.FillRectangle(brush, 0, third, 16, third);
-        using (var brush = new SolidBrush(Color.FromArgb(213, 43, 30))) g.FillRectangle(brush, 0, 2 * third, 16, 16 - 2 * third);
-        return Icon.FromHandle(bmp.GetHicon());
+        var old = _trayIcons.Values.ToList();
+        _trayIcons.Clear();
+
+        int iconSize = Math.Max(16, Math.Max(SystemInformation.SmallIconSize.Width, SystemInformation.SmallIconSize.Height));
+        foreach (FlagId flag in Enum.GetValues<FlagId>())
+        {
+            using var bmp = BadgeRenderer.Render(flag, _settings.Mode, _settings.Shape, iconSize, iconSize, clipCorners: true);
+            IntPtr hIcon = bmp.GetHicon();
+            _trayIcons[flag] = (Icon.FromHandle(hIcon), hIcon);
+        }
+
+        UpdateTrayIcon();
+
+        foreach (var (icon, handle) in old)
+        {
+            icon.Dispose();
+            NativeMethods.DestroyIcon(handle);
+        }
+    }
+
+    private void UpdateTrayIcon()
+    {
+        if (_trayIcons.TryGetValue(_current, out var entry))
+        {
+            _tray.Icon = entry.Icon;
+        }
+        _tray.Text = _current switch
+        {
+            FlagId.Ru => "LayoutFlag — RU",
+            FlagId.En => "LayoutFlag — EN",
+            _ => "LayoutFlag"
+        };
     }
 
     private void Restart()
@@ -248,6 +278,7 @@ public class FlagForm : Form
         _settings.Mode = mode;
         _settings.Save();
         RegenerateBadge();
+        RebuildTrayIcons();
     }
 
     private void SetShape(BadgeShape shape)
@@ -255,6 +286,7 @@ public class FlagForm : Form
         _settings.Shape = shape;
         _settings.Save();
         ApplyAppearance();
+        RebuildTrayIcons();
     }
 
     private void SetSize(BadgeSize size)
@@ -297,7 +329,14 @@ public class FlagForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _tray.Visible = false;
+        _tray.Icon = null;
         _tray.Dispose();
+        foreach (var (icon, handle) in _trayIcons.Values)
+        {
+            icon.Dispose();
+            NativeMethods.DestroyIcon(handle);
+        }
+        _trayIcons.Clear();
         _menu.Dispose();
         _badgeBitmap?.Dispose();
         _settings.Save();

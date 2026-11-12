@@ -44,4 +44,16 @@ public class BadgeGeometryTests
             Assert.Equal(px.Height, bmp.Height);
         }
     }
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(24)]
+    [InlineData(32)]
+    public void Render_TrayIconWithClippedCorners_HasTransparentCorner(int size)
+    {
+        using var bmp = BadgeRenderer.Render(FlagId.Ru, BadgeMode.Flags, BadgeShape.Rounded, size, size, clipCorners: true);
+        Assert.Equal(size, bmp.Width);
+        Assert.Equal(size, bmp.Height);
+        Assert.Equal(0, bmp.GetPixel(0, 0).A);
+    }
 }

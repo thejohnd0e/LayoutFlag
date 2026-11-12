@@ -6,7 +6,7 @@ namespace LayoutFlag;
 
 public static class BadgeRenderer
 {
-    public static Bitmap Render(FlagId flag, BadgeMode mode, BadgeShape shape, int width, int height)
+    public static Bitmap Render(FlagId flag, BadgeMode mode, BadgeShape shape, int width, int height, bool clipCorners = false)
     {
         const int scale = 4;
         int sw = width * scale;
@@ -19,6 +19,13 @@ public static class BadgeRenderer
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
+            if (clipCorners)
+            {
+                g.Clear(Color.Transparent);
+                using var clipPath = BadgeGeometry.CreateShapePath(shape, sw, sh, inset: scale * 0.5f);
+                g.SetClip(clipPath);
+            }
+
             if (mode == BadgeMode.Color)
             {
                 DrawSolidColor(g, flag, sw, sh);
@@ -26,6 +33,11 @@ public static class BadgeRenderer
             else
             {
                 DrawFlag(g, flag, sw, sh);
+            }
+
+            if (clipCorners)
+            {
+                g.ResetClip();
             }
 
             // Тонкая окантовка по краю формы, чтобы плашка читалась на любом фоне (и светлом, и тёмном)
@@ -77,7 +89,7 @@ public static class BadgeRenderer
     private static void DrawRussiaFlag(Graphics g, int w, int h)
     {
         float third = h / 3f;
-        g.Clear(Color.White);
+        g.FillRectangle(Brushes.White, 0, 0, w, h);
         using var blue = new SolidBrush(Color.FromArgb(0, 51, 160));
         using var red = new SolidBrush(Color.FromArgb(213, 43, 30));
         g.FillRectangle(blue, 0, third, w, third + 1f);
@@ -86,7 +98,7 @@ public static class BadgeRenderer
 
     private static void DrawUsaFlag(Graphics g, int w, int h)
     {
-        g.Clear(Color.White);
+        g.FillRectangle(Brushes.White, 0, 0, w, h);
         float stripe = h / 13f;
         using var red = new SolidBrush(Color.FromArgb(179, 25, 27));
         for (int i = 0; i < 13; i += 2)
