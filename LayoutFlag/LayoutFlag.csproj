@@ -9,10 +9,4 @@
     <RootNamespace>LayoutFlag</RootNamespace>
   </PropertyGroup>
 
-  <ItemGroup>
-    <EmbeddedResource Include="Flags\russia.png" />
-    <EmbeddedResource Include="Flags\usa.png" />
-    <EmbeddedResource Include="Flags\unknown.png" />
-  </ItemGroup>
-
 </Project>

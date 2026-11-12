@@ -2,16 +2,41 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace LayoutFlag;
+
+public enum BadgeMode
+{
+    Flags,
+    Color
+}
+
+public enum BadgeShape
+{
+    Rounded,
+    Rectangle,
+    Circle
+}
+
+public enum BadgeSize
+{
+    Small,
+    Medium,
+    Large
+}
 
 public class AppSettings
 {
     public Point? Location { get; set; }
+    public BadgeMode Mode { get; set; } = BadgeMode.Flags;
+    public BadgeShape Shape { get; set; } = BadgeShape.Rounded;
+    public BadgeSize BadgeSize { get; set; } = BadgeSize.Medium;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
-        WriteIndented = true
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
     };
 
     private static string DefaultPath =>
@@ -26,7 +51,11 @@ public class AppSettings
         try
         {
             if (!File.Exists(path)) return new AppSettings();
-            return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path)) ?? new AppSettings();
+            var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), JsonOpts) ?? new AppSettings();
+            if (!Enum.IsDefined(loaded.Mode)) loaded.Mode = BadgeMode.Flags;
+            if (!Enum.IsDefined(loaded.Shape)) loaded.Shape = BadgeShape.Rounded;
+            if (!Enum.IsDefined(loaded.BadgeSize)) loaded.BadgeSize = BadgeSize.Medium;
+            return loaded;
         }
         catch
         {
@@ -45,7 +74,7 @@ public class AppSettings
         }
         catch
         {
-            // позиция — не критичные данные: молча пропускаем
+            // настройки — не критичные данные: молча пропускаем ошибку записи
         }
     }
 }

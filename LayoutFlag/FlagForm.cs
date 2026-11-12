@@ -1,47 +1,47 @@
 using System;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace LayoutFlag;
 
 public class FlagForm : Form
 {
-    private readonly PictureBox _box = new();
     private readonly System.Windows.Forms.Timer _timer = new();
-    private readonly Image _flagRu;
-    private readonly Image _flagEn;
-    private readonly Image _flagUnknown;
     private FlagId _current = FlagId.Unknown;
     private readonly AppSettings _settings;
     private bool _restoringPosition;
-    private ContextMenuStrip? _menu;
+    private Bitmap? _badgeBitmap;
+    private readonly ContextMenuStrip _menu;
     private readonly NotifyIcon _tray;
+
+    private ToolStripMenuItem _modeFlagsItem = null!;
+    private ToolStripMenuItem _modeColorItem = null!;
+    private ToolStripMenuItem _shapeRoundedItem = null!;
+    private ToolStripMenuItem _shapeRectItem = null!;
+    private ToolStripMenuItem _shapeCircleItem = null!;
+    private ToolStripMenuItem _sizeSmallItem = null!;
+    private ToolStripMenuItem _sizeMediumItem = null!;
+    private ToolStripMenuItem _sizeLargeItem = null!;
+    private ToolStripMenuItem _autostartItem = null!;
 
     public FlagForm()
     {
         _settings = AppSettings.Load();
 
-        _flagRu = LoadFlag("russia");
-        _flagEn = LoadFlag("usa");
-        _flagUnknown = LoadFlag("unknown");
-
         FormBorderStyle = FormBorderStyle.None;
         TopMost = true;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual;
-        Size = new Size(56, 42);
-        BackColor = Color.FromArgb(30, 30, 30);
+        DoubleBuffered = true;
+
+        // Сначала задаём размер по настройкам, чтобы DefaultOrSavedLocation верно посчитал угол
+        Size = BadgeGeometry.GetPixelSize(_settings.Shape, _settings.BadgeSize);
         Location = DefaultOrSavedLocation();
+        ApplyAppearance();
 
-        _box.Dock = DockStyle.Fill;
-        _box.SizeMode = PictureBoxSizeMode.Zoom;
-        _box.Margin = new Padding(3);
-        _box.Image = _flagUnknown;
-        Controls.Add(_box);
-
-        // PictureBox перекрывает всю форму — мышиные события приходят ему, а не форме
-        _box.MouseDown += (s, e) => BeginDrag(e.Button);
-        _box.MouseClick += (s, e) => { if (e.Button == MouseButtons.Right) ShowContextMenu(); };
+        _menu = BuildContextMenu();
+        _menu.Opening += (s, e) => SyncMenuChecks();
 
         _timer.Interval = 100;
         _timer.Tick += (s, e) => PollLayout();
@@ -52,26 +52,9 @@ public class FlagForm : Form
             Icon = MakeTrayIcon(),
             Text = "LayoutFlag — индикатор раскладки",
             Visible = true,
-            ContextMenuStrip = BuildContextMenu()
+            ContextMenuStrip = _menu
         };
         _tray.DoubleClick += (s, e) => Restart();
-    }
-
-    private static Icon MakeTrayIcon()
-    {
-        using var bmp = new Bitmap(16, 16);
-        using var g = Graphics.FromImage(bmp);
-        g.Clear(Color.FromArgb(30, 30, 30));
-        int third = 16 / 3;
-        using (var brush = new SolidBrush(Color.RoyalBlue)) g.FillRectangle(brush, 0, third, 16, third);
-        using (var brush = new SolidBrush(Color.Red)) g.FillRectangle(brush, 0, 2 * third, 16, 16 - 2 * third);
-        return Icon.FromHandle(bmp.GetHicon());
-    }
-
-    private void Restart()
-    {
-        _settings.Save();
-        Application.Restart(); // закрывает форму и запускает новый экземпляр
     }
 
     private Point DefaultOrSavedLocation()
@@ -86,7 +69,7 @@ public class FlagForm : Form
     }
 
     private bool IsOnScreen(Point loc) =>
-        Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(new Rectangle(loc, Size)));
+        Screen.AllScreens.Any(s => s.Bounds.IntersectsWith(new Rectangle(loc, Size)));
 
     protected override CreateParams CreateParams
     {
@@ -99,15 +82,34 @@ public class FlagForm : Form
         }
     }
 
-    private void BeginDrag(MouseButtons button)
+    protected override void OnPaint(PaintEventArgs e)
     {
-        if (button != MouseButtons.Left)
+        if (_badgeBitmap is not null)
         {
-            return;
+            e.Graphics.DrawImageUnscaled(_badgeBitmap, 0, 0);
         }
-        // drag без активации: стандартный move через non-client area
-        NativeMethods.ReleaseCapture();
-        NativeMethods.SendMessage(Handle, NativeMethods.WM_NCLBUTTONDOWN, (IntPtr)NativeMethods.HTCAPTION, IntPtr.Zero);
+        base.OnPaint(e);
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
+        {
+            // drag без активации: стандартный move через non-client area
+            NativeMethods.ReleaseCapture();
+            NativeMethods.SendMessage(Handle, NativeMethods.WM_NCLBUTTONDOWN, (IntPtr)NativeMethods.HTCAPTION, IntPtr.Zero);
+        }
+        base.OnMouseDown(e);
+    }
+
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Right)
+        {
+            SyncMenuChecks();
+            _menu.Show(Cursor.Position);
+        }
+        base.OnMouseClick(e);
     }
 
     private void PollLayout()
@@ -124,74 +126,181 @@ public class FlagForm : Form
         if (flag != _current)
         {
             _current = flag;
-            _box.Image = flag switch
-            {
-                FlagId.Ru => _flagRu,
-                FlagId.En => _flagEn,
-                _ => _flagUnknown
-            };
+            RegenerateBadge();
         }
     }
 
-    private void ShowContextMenu()
+    private void ApplyAppearance()
     {
-        _menu ??= BuildContextMenu();
-        // синхронизируем галочку с реальным наличием ярлыка
-        ((ToolStripMenuItem)_menu.Items[0]!).Checked = Shortcut.AutostartEnabled();
-        _menu.Show(Cursor.Position);
+        _restoringPosition = true;
+        try
+        {
+            Size = BadgeGeometry.GetPixelSize(_settings.Shape, _settings.BadgeSize);
+
+            using var path = BadgeGeometry.CreateShapePath(_settings.Shape, Width, Height);
+            var oldRegion = Region;
+            Region = new Region(path);
+            oldRegion?.Dispose();
+
+            ClampLocation();
+        }
+        finally
+        {
+            _restoringPosition = false;
+        }
+
+        _settings.Location = Location;
+        RegenerateBadge();
+    }
+
+    private void RegenerateBadge()
+    {
+        var next = BadgeRenderer.Render(_current, _settings.Mode, _settings.Shape, Width, Height);
+        var prev = _badgeBitmap;
+        _badgeBitmap = next;
+        prev?.Dispose();
+        Invalidate();
+    }
+
+    private static Icon MakeTrayIcon()
+    {
+        using var bmp = new Bitmap(16, 16);
+        using var g = Graphics.FromImage(bmp);
+        g.Clear(Color.White);
+        int third = 16 / 3;
+        using (var brush = new SolidBrush(Color.FromArgb(0, 51, 160))) g.FillRectangle(brush, 0, third, 16, third);
+        using (var brush = new SolidBrush(Color.FromArgb(213, 43, 30))) g.FillRectangle(brush, 0, 2 * third, 16, 16 - 2 * third);
+        return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    private void Restart()
+    {
+        _settings.Save();
+        Application.Restart();
     }
 
     private ContextMenuStrip BuildContextMenu()
     {
         var menu = new ContextMenuStrip();
+
+        var modeMenu = new ToolStripMenuItem("Вид");
+        _modeFlagsItem = new ToolStripMenuItem("Флаги", null, (s, e) => SetMode(BadgeMode.Flags));
+        _modeColorItem = new ToolStripMenuItem("Цвет", null, (s, e) => SetMode(BadgeMode.Color));
+        modeMenu.DropDownItems.AddRange(new ToolStripItem[] { _modeFlagsItem, _modeColorItem });
+
+        var shapeMenu = new ToolStripMenuItem("Форма");
+        _shapeRoundedItem = new ToolStripMenuItem("Скруглённая", null, (s, e) => SetShape(BadgeShape.Rounded));
+        _shapeRectItem = new ToolStripMenuItem("Прямоугольник", null, (s, e) => SetShape(BadgeShape.Rectangle));
+        _shapeCircleItem = new ToolStripMenuItem("Круг", null, (s, e) => SetShape(BadgeShape.Circle));
+        shapeMenu.DropDownItems.AddRange(new ToolStripItem[] { _shapeRoundedItem, _shapeRectItem, _shapeCircleItem });
+
+        var sizeMenu = new ToolStripMenuItem("Размер");
+        _sizeSmallItem = new ToolStripMenuItem("Маленький", null, (s, e) => SetSize(BadgeSize.Small));
+        _sizeMediumItem = new ToolStripMenuItem("Средний", null, (s, e) => SetSize(BadgeSize.Medium));
+        _sizeLargeItem = new ToolStripMenuItem("Крупный", null, (s, e) => SetSize(BadgeSize.Large));
+        sizeMenu.DropDownItems.AddRange(new ToolStripItem[] { _sizeSmallItem, _sizeMediumItem, _sizeLargeItem });
+
         var restart = new ToolStripMenuItem("Перезапустить");
         restart.Click += (s, e) => Restart();
-        var auto = new ToolStripMenuItem("Автозапуск")
+
+        _autostartItem = new ToolStripMenuItem("Автозапуск")
         {
             Checked = Shortcut.AutostartEnabled(),
             CheckOnClick = true
         };
-        auto.Click += (s, e) => Shortcut.ToggleAutostart(auto.Checked);
+        _autostartItem.Click += (s, e) => Shortcut.ToggleAutostart(_autostartItem.Checked);
+
         var exit = new ToolStripMenuItem("Выход");
         exit.Click += (s, e) => Close();
-        menu.Items.Add(restart);
-        menu.Items.Add(auto);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(exit);
+
+        menu.Items.AddRange(new ToolStripItem[]
+        {
+            modeMenu,
+            shapeMenu,
+            sizeMenu,
+            new ToolStripSeparator(),
+            restart,
+            _autostartItem,
+            new ToolStripSeparator(),
+            exit
+        });
         return menu;
+    }
+
+    private void SyncMenuChecks()
+    {
+        _modeFlagsItem.Checked = _settings.Mode == BadgeMode.Flags;
+        _modeColorItem.Checked = _settings.Mode == BadgeMode.Color;
+
+        _shapeRoundedItem.Checked = _settings.Shape == BadgeShape.Rounded;
+        _shapeRectItem.Checked = _settings.Shape == BadgeShape.Rectangle;
+        _shapeCircleItem.Checked = _settings.Shape == BadgeShape.Circle;
+
+        _sizeSmallItem.Checked = _settings.BadgeSize == BadgeSize.Small;
+        _sizeMediumItem.Checked = _settings.BadgeSize == BadgeSize.Medium;
+        _sizeLargeItem.Checked = _settings.BadgeSize == BadgeSize.Large;
+
+        _autostartItem.Checked = Shortcut.AutostartEnabled();
+    }
+
+    private void SetMode(BadgeMode mode)
+    {
+        _settings.Mode = mode;
+        _settings.Save();
+        RegenerateBadge();
+    }
+
+    private void SetShape(BadgeShape shape)
+    {
+        _settings.Shape = shape;
+        _settings.Save();
+        ApplyAppearance();
+    }
+
+    private void SetSize(BadgeSize size)
+    {
+        _settings.BadgeSize = size;
+        _settings.Save();
+        ApplyAppearance();
     }
 
     protected override void OnLocationChanged(EventArgs e)
     {
         base.OnLocationChanged(e);
         if (_restoringPosition) return;
-        // клэмп в видимую область: плашку нельзя утащить за экран
-        var loc = Location;
-        var area = Screen.FromPoint(loc).WorkingArea;
-        int x = Math.Clamp(loc.X, area.Left - Width + 40, area.Right - 40);
-        int y = Math.Clamp(loc.Y, area.Top - Height + 20, area.Bottom - 20);
-        if (x != loc.X || y != loc.Y)
+        _restoringPosition = true;
+        try
         {
-            _restoringPosition = true;
-            Location = new Point(x, y);
+            ClampLocation();
+        }
+        finally
+        {
             _restoringPosition = false;
         }
         _settings.Location = Location;
+    }
+
+    private void ClampLocation()
+    {
+        var loc = Location;
+        var area = Screen.FromPoint(loc).Bounds;
+        int marginX = Math.Min(Width, 20);
+        int marginY = Math.Min(Height, 20);
+        int x = Math.Clamp(loc.X, area.Left - Width + marginX, area.Right - marginX);
+        int y = Math.Clamp(loc.Y, area.Top - Height + marginY, area.Bottom - marginY);
+        if (x != loc.X || y != loc.Y)
+        {
+            Location = new Point(x, y);
+        }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _tray.Visible = false;
         _tray.Dispose();
+        _menu.Dispose();
+        _badgeBitmap?.Dispose();
         _settings.Save();
         base.OnFormClosing(e);
-    }
-
-    private static Image LoadFlag(string name)
-    {
-        var asm = typeof(FlagForm).Assembly;
-        using var stream = asm.GetManifestResourceStream($"LayoutFlag.Flags.{name}.png")
-            ?? throw new InvalidOperationException($"Embedded resource {name}.png not found");
-        return new Bitmap(stream);
     }
 }
