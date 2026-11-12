@@ -38,6 +38,10 @@ public class FlagForm : Form
         _box.Image = _flagUnknown;
         Controls.Add(_box);
 
+        // PictureBox перекрывает всю форму — мышиные события приходят ему, а не форме
+        _box.MouseDown += (s, e) => BeginDrag(e.Button);
+        _box.MouseClick += (s, e) => { if (e.Button == MouseButtons.Right) ShowContextMenu(); };
+
         _timer.Interval = 100;
         _timer.Tick += (s, e) => PollLayout();
         _timer.Start();
@@ -68,24 +72,15 @@ public class FlagForm : Form
         }
     }
 
-    protected override void OnMouseClick(MouseEventArgs e)
+    private void BeginDrag(MouseButtons button)
     {
-        if (e.Button == MouseButtons.Right)
+        if (button != MouseButtons.Left)
         {
-            ShowContextMenu();
+            return;
         }
-        base.OnMouseClick(e);
-    }
-
-    protected override void OnMouseDown(MouseEventArgs e)
-    {
-        if (e.Button == MouseButtons.Left)
-        {
-            // drag без активации: стандартный move через non-client area
-            NativeMethods.ReleaseCapture();
-            NativeMethods.SendMessage(Handle, NativeMethods.WM_NCLBUTTONDOWN, (IntPtr)NativeMethods.HTCAPTION, IntPtr.Zero);
-        }
-        base.OnMouseDown(e);
+        // drag без активации: стандартный move через non-client area
+        NativeMethods.ReleaseCapture();
+        NativeMethods.SendMessage(Handle, NativeMethods.WM_NCLBUTTONDOWN, (IntPtr)NativeMethods.HTCAPTION, IntPtr.Zero);
     }
 
     private void PollLayout()
