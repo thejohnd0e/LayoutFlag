@@ -52,7 +52,8 @@ public class AppSettingsTests
     [InlineData(0, 1)]
     [InlineData(-5, 1)]
     [InlineData(2, 2)]
-    [InlineData(99, 3)]
+    [InlineData(4, 4)]
+    [InlineData(99, 4)]
     public void Load_ClampsBadgeCountToValidRange(int rawCount, int expectedCount)
     {
         string path = TempFile($"{{\"BadgeCount\":{rawCount}}}");

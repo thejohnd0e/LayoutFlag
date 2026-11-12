@@ -22,6 +22,7 @@ public class TrayAppContext : ApplicationContext
     private ToolStripMenuItem _count1Item = null!;
     private ToolStripMenuItem _count2Item = null!;
     private ToolStripMenuItem _count3Item = null!;
+    private ToolStripMenuItem _count4Item = null!;
     private ToolStripMenuItem _modeFlagsItem = null!;
     private ToolStripMenuItem _modeColorItem = null!;
     private ToolStripMenuItem _shapeRoundedItem = null!;
@@ -196,7 +197,8 @@ public class TrayAppContext : ApplicationContext
         _count1Item = new ToolStripMenuItem("1", null, (s, e) => SetBadgeCount(1));
         _count2Item = new ToolStripMenuItem("2", null, (s, e) => SetBadgeCount(2));
         _count3Item = new ToolStripMenuItem("3", null, (s, e) => SetBadgeCount(3));
-        countMenu.DropDownItems.AddRange(new ToolStripItem[] { _count1Item, _count2Item, _count3Item });
+        _count4Item = new ToolStripMenuItem("4", null, (s, e) => SetBadgeCount(4));
+        countMenu.DropDownItems.AddRange(new ToolStripItem[] { _count1Item, _count2Item, _count3Item, _count4Item });
 
         var modeMenu = new ToolStripMenuItem("Вид");
         _modeFlagsItem = new ToolStripMenuItem("Флаги", null, (s, e) => SetMode(BadgeMode.Flags));
@@ -248,6 +250,7 @@ public class TrayAppContext : ApplicationContext
         _count1Item.Checked = _settings.BadgeCount == 1;
         _count2Item.Checked = _settings.BadgeCount == 2;
         _count3Item.Checked = _settings.BadgeCount == 3;
+        _count4Item.Checked = _settings.BadgeCount == 4;
 
         _modeFlagsItem.Checked = _settings.Mode == BadgeMode.Flags;
         _modeColorItem.Checked = _settings.Mode == BadgeMode.Color;

@@ -29,7 +29,7 @@ public enum BadgeSize
 
 public class AppSettings
 {
-    public const int MaxBadges = 3;
+    public const int MaxBadges = 4;
 
     public int BadgeCount { get; set; } = 1;
     public List<Point> Locations { get; set; } = new();
