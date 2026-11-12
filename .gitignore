@@ -2,3 +2,6 @@ bin/
 obj/
 publish/
 *.user
+installer/publish/
+installer/*.exe
+installer/*.tmp
