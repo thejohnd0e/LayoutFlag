@@ -41,6 +41,7 @@ public class TrayAppContext : ApplicationContext
     private ToolStripMenuItem _langEnItem = null!;
     private ToolStripMenuItem _restartItem = null!;
     private ToolStripMenuItem _autostartItem = null!;
+    private ToolStripMenuItem _aboutItem = null!;
     private ToolStripMenuItem _exitItem = null!;
 
     public TrayAppContext(UiLanguage? initialLanguageHint = null)
@@ -253,6 +254,9 @@ public class TrayAppContext : ApplicationContext
         _exitItem = new ToolStripMenuItem();
         _exitItem.Click += (s, e) => ExitApp();
 
+        _aboutItem = new ToolStripMenuItem();
+        _aboutItem.Click += (s, e) => ShowAboutDialog();
+
         menu.Items.AddRange(new ToolStripItem[]
         {
             _countMenu,
@@ -263,6 +267,7 @@ public class TrayAppContext : ApplicationContext
             new ToolStripSeparator(),
             _restartItem,
             _autostartItem,
+            _aboutItem,
             new ToolStripSeparator(),
             _exitItem
         });
@@ -290,6 +295,7 @@ public class TrayAppContext : ApplicationContext
         _langEnItem.Text = t.LangEn;
         _restartItem.Text = t.Restart;
         _autostartItem.Text = t.Autostart;
+        _aboutItem.Text = t.About;
         _exitItem.Text = t.Exit;
     }
 
@@ -323,6 +329,32 @@ public class TrayAppContext : ApplicationContext
         _settings.Language = language;
         _settings.Save();
         ApplyMenuLanguage();
+    }
+
+    private void ShowAboutDialog()
+    {
+        var t = Strings.For(_settings.Language);
+        var result = MessageBox.Show(
+            t.AboutText,
+            t.AboutTitle,
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Information);
+
+        if (result == DialogResult.Yes)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = Strings.RepositoryUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                // молча игнорируем, если браузер не смог запуститься
+            }
+        }
     }
 
     private void SetBadgeCount(int count)

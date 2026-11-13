@@ -3,7 +3,7 @@
 ; Output: installer\LayoutFlag-Setup.exe
 
 #define MyAppName "LayoutFlag"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.2.0"
 #define MyAppPublisher "LayoutFlag"
 #define MyAppExeName "LayoutFlag.exe"
 

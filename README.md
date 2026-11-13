@@ -1,5 +1,9 @@
 # LayoutFlag
 
+[![GitHub Release](https://img.shields.io/github/v/release/thejohnd0e/LayoutFlag?include_prereleases&color=blue&label=Release)](https://github.com/thejohnd0e/LayoutFlag/releases/latest)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(64--bit)-0078D6?logo=windows&logoColor=white)](https://github.com/thejohnd0e/LayoutFlag)
+[![Target: .NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+
 [English](#english) | [Русский](#русский)
 
 ---
@@ -20,15 +24,21 @@
 ### Возможности
 
 - **Всегда под рукой:** плашка отображается поверх всех окон и не перехватывает на себя фокус ввода при клике или перетаскивании.
-- **Поддержка нескольких мониторов:** можно включить от 1 до 4 независимых плашек (например, разместить по одной на каждом экране).
+- **Поддержка нескольких мониторов:** можно включить от 1 до 4 синхронных плашек (например, разместить по одной на каждом экране).
 - **Свободное перемещение:** каждую плашку можно перетащить мышью в любую точку экрана, позиции автоматически запоминаются.
 - **Настройка внешнего вида через контекстное меню:**
   - **Вид:** флаги стран или минималистичные цветные плашки (синий / красный).
   - **Форма:** скруглённая, прямоугольная или круг.
   - **Размер:** маленький, средний или крупный.
-- **Индикатор в системном трее:** иконка в трее также меняется в зависимости от активной раскладки.
+- **Индикатор в системном трее:** иконка в трее также динамически меняется в зависимости от активной раскладки.
 - **Двуязычный интерфейс:** меню на русском и английском языках (с автоопределением по языку системы).
 - **Автозапуск:** удобное включение автозагрузки вместе с Windows в один клик.
+
+### Системные требования
+
+- **Операционная система:** Windows 10 или Windows 11 (64-бит).
+- **Мониторы:** один или несколько дисплеев любого разрешения и масштаба (полная поддержка Per-Monitor V2 DPI).
+- **Инсталлятор:** автономный (standalone / self-contained) — не требует предварительной установки .NET Runtime.
 
 ---
 
@@ -57,3 +67,9 @@ On modern high-resolution displays (2K, 4K) and multi-monitor setups, the defaul
 - **Dynamic tray icon:** The system tray icon also reflects the active keyboard layout.
 - **Bilingual interface:** Russian and English UI with automatic system language detection.
 - **Startup option:** Easily toggle launch on Windows startup with a single click.
+
+### System Requirements
+
+- **Operating System:** Windows 10 or Windows 11 (64-bit).
+- **Monitors:** Single or multiple displays of any resolution and scale (full Per-Monitor V2 DPI support).
+- **Installer:** Standalone (self-contained) — does not require a pre-installed .NET Runtime.

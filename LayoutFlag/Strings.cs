@@ -20,12 +20,18 @@ public sealed record UiStrings(
     string LangAuto,
     string LangRu,
     string LangEn,
+    string About,
+    string AboutTitle,
+    string AboutText,
     string Restart,
     string Autostart,
     string Exit);
 
 public static class Strings
 {
+    public const string Version = "1.2.0";
+    public const string RepositoryUrl = "https://github.com/thejohnd0e/LayoutFlag";
+
     private static readonly UiStrings Russian = new(
         Badges: "Плашек",
         Style: "Вид",
@@ -43,6 +49,9 @@ public static class Strings
         LangAuto: "Авто (система)",
         LangRu: "Русский",
         LangEn: "English",
+        About: "О программе",
+        AboutTitle: "О программе LayoutFlag",
+        AboutText: $"LayoutFlag — плавающий индикатор раскладки\nВерсия: {Version}\n\nРепозиторий:\n{RepositoryUrl}\n\nОткрыть страницу репозитория в браузере?",
         Restart: "Перезапустить",
         Autostart: "Автозапуск",
         Exit: "Выход");
@@ -64,6 +73,9 @@ public static class Strings
         LangAuto: "Auto (system)",
         LangRu: "Русский",
         LangEn: "English",
+        About: "About",
+        AboutTitle: "About LayoutFlag",
+        AboutText: $"LayoutFlag — floating keyboard layout indicator\nVersion: {Version}\n\nRepository:\n{RepositoryUrl}\n\nOpen repository page in browser?",
         Restart: "Restart",
         Autostart: "Run at startup",
         Exit: "Exit");
