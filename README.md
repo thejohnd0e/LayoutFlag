@@ -14,7 +14,7 @@
 
 ### Для чего создано
 
-На современных рабочих местах с мониторами высокого разрешения (2K, 4K) и многомониторных конфигурациях стандартный значок языка в трее Windows становится практически незаметным:
+На современных рабочих местах с мониторами высокого разрешения (4K+) и многомониторных конфигурациях стандартный значок языка в трее Windows становится практически незаметным:
 - приходится постоянно отвлекаться и «шарить глазами» по экрану в угол;
 - на широком рабочем столе или нескольких дисплеях трей находится слишком далеко от зоны набора текста;
 - легко ошибиться раскладкой и напечатать текст не теми символами.
@@ -48,7 +48,7 @@
 
 ### Why It Was Created
 
-On modern high-resolution displays (2K, 4K) and multi-monitor setups, the default Windows tray language icon is often hard to notice:
+On modern high-resolution displays (4K+) and multi-monitor setups, the default Windows tray language icon is often hard to notice:
 - You frequently have to look away and scan across screens just to check the layout;
 - On wide desks and multi-display setups, the system tray is far from your actual typing area;
 - It's easy to start typing in the wrong language and have to retype text.
