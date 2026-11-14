@@ -101,7 +101,12 @@ public class AppSettings
             Location = null;
             BadgeCount = Math.Clamp(BadgeCount, 1, MaxBadges);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOpts));
+
+            // Пишем во временный файл и подменяем целевой: сбой посреди записи
+            // не оставит наполовину записанный settings.json
+            string tmp = path + ".tmp";
+            File.WriteAllText(tmp, JsonSerializer.Serialize(this, JsonOpts));
+            File.Move(tmp, path, overwrite: true);
         }
         catch
         {

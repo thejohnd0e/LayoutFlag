@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace LayoutFlag;
 
@@ -15,6 +17,9 @@ public class TrayAppContext : ApplicationContext
     private readonly NotifyIcon _tray;
     private readonly Dictionary<FlagId, (Icon Icon, IntPtr Handle)> _trayIcons = new();
     private readonly List<BadgeWindow> _windows = new();
+
+    private readonly System.Windows.Forms.Timer _displayChangeTimer = new();
+    private readonly SynchronizationContext _syncContext = CaptureUiContext();
 
     private FlagId _current = FlagId.Unknown;
     private bool _disposed;
@@ -74,6 +79,16 @@ public class TrayAppContext : ApplicationContext
             _saveDebounceTimer.Stop();
             _settings.Save();
         };
+
+        // Смена мониторов/разрешения: событие приходит из служебного потока,
+        // а Windows ещё несколько сотен мс перестраивает раскладку экранов — ждём и обрабатываем в UI-потоке
+        _displayChangeTimer.Interval = 700;
+        _displayChangeTimer.Tick += (s, e) =>
+        {
+            _displayChangeTimer.Stop();
+            EnsureWindowsOnScreen();
+        };
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
         SyncWindowCount();
         PollLayout();
@@ -153,6 +168,42 @@ public class TrayAppContext : ApplicationContext
             win.Moved -= OnWindowMoved;
             win.Close();
             win.Dispose();
+        }
+    }
+
+    private static SynchronizationContext CaptureUiContext()
+    {
+        // Гарантируем WinForms-контекст, чтобы Post возвращал нас в UI-поток
+        if (SynchronizationContext.Current is not WindowsFormsSynchronizationContext)
+        {
+            SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+        }
+        return SynchronizationContext.Current!;
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        if (_disposed) return;
+        _syncContext.Post(_ =>
+        {
+            if (_disposed) return;
+            _displayChangeTimer.Stop();
+            _displayChangeTimer.Start(); // перезапуск: ждём, пока серия событий закончится
+        }, null);
+    }
+
+    private void EnsureWindowsOnScreen()
+    {
+        var workingAreas = Screen.AllScreens.Select(s => s.WorkingArea).ToArray();
+        var placed = new List<Point>();
+        foreach (var win in _windows)
+        {
+            if (!IsOnScreen(win.Location, win.Size))
+            {
+                var loc = BadgePlacement.GetDefaultLocation(win.Index, win.Size, workingAreas, placed);
+                win.Location = loc; // OnLocationChanged -> Moved -> отложенное сохранение
+            }
+            placed.Add(win.Location);
         }
     }
 
@@ -416,6 +467,9 @@ public class TrayAppContext : ApplicationContext
         if (_disposed) return;
         _disposed = true;
 
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        _displayChangeTimer.Stop();
+        _displayChangeTimer.Dispose();
         _pollTimer.Stop();
         _pollTimer.Dispose();
         _saveDebounceTimer.Stop();

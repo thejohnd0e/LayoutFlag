@@ -29,7 +29,15 @@ public sealed record UiStrings(
 
 public static class Strings
 {
-    public const string Version = "1.2.1";
+    /// <summary>Версия берётся из сборки (<Version> в LayoutFlag.csproj) — единственный источник.</summary>
+    public static readonly string Version = GetVersion();
+
+    private static string GetVersion()
+    {
+        var v = typeof(Strings).Assembly.GetName().Version;
+        return v is null ? "?" : $"{v.Major}.{v.Minor}.{v.Build}";
+    }
+
     public const string RepositoryUrl = "https://github.com/thejohnd0e/LayoutFlag";
 
     private static readonly UiStrings Russian = new(

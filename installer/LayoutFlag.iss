@@ -3,7 +3,10 @@
 ; Output: installer\LayoutFlag-Setup.exe
 
 #define MyAppName "LayoutFlag"
-#define MyAppVersion "1.2.1"
+; Версия берётся из собранного exe (<Version> в LayoutFlag.csproj) — вручную не менять
+#define MyAppExePath "publish\LayoutFlag.exe"
+#define MyAppFullVersion GetVersionNumbersString(MyAppExePath)
+#define MyAppVersion Copy(MyAppFullVersion, 1, RPos(".", MyAppFullVersion) - 1)
 #define MyAppPublisher "LayoutFlag"
 #define MyAppExeName "LayoutFlag.exe"
 

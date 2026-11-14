@@ -87,3 +87,20 @@ public class AppSettingsTests
         Assert.Equal(UiLanguage.En, loaded.Language);
     }
 }
+
+public class AppSettingsAtomicSaveTests
+{
+    [Fact]
+    public void Save_OverwritesExistingFile_AndLeavesNoTempFile()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"lf_{Path.GetRandomFileName()}");
+        string path = Path.Combine(dir, "settings.json");
+
+        new AppSettings { BadgeCount = 2 }.Save(path);
+        new AppSettings { BadgeCount = 3 }.Save(path);
+
+        Assert.Equal(3, AppSettings.Load(path).BadgeCount);
+        Assert.False(File.Exists(path + ".tmp"));
+        Directory.Delete(dir, true);
+    }
+}
