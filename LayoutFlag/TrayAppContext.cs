@@ -54,6 +54,7 @@ public class TrayAppContext : ApplicationContext
             _settings.Save();
         }
 
+        Autostart.MigrateLegacyShortcut();
         _menu = BuildContextMenu();
         ApplyMenuLanguage();
         _menu.Opening += (s, e) => SyncMenuChecks();
@@ -246,10 +247,13 @@ public class TrayAppContext : ApplicationContext
 
         _autostartItem = new ToolStripMenuItem
         {
-            Checked = Shortcut.AutostartEnabled(),
-            CheckOnClick = true
+            Checked = Autostart.IsEnabled()
         };
-        _autostartItem.Click += (s, e) => Shortcut.ToggleAutostart(_autostartItem.Checked);
+        _autostartItem.Click += (s, e) =>
+        {
+            Autostart.SetEnabled(!Autostart.IsEnabled());
+            _autostartItem.Checked = Autostart.IsEnabled(); // показываем фактическое состояние
+        };
 
         _exitItem = new ToolStripMenuItem();
         _exitItem.Click += (s, e) => ExitApp();
@@ -321,7 +325,7 @@ public class TrayAppContext : ApplicationContext
         _langRuItem.Checked = _settings.Language == UiLanguage.Ru;
         _langEnItem.Checked = _settings.Language == UiLanguage.En;
 
-        _autostartItem.Checked = Shortcut.AutostartEnabled();
+        _autostartItem.Checked = Autostart.IsEnabled();
     }
 
     private void SetLanguage(UiLanguage language)

@@ -3,7 +3,7 @@
 ; Output: installer\LayoutFlag-Setup.exe
 
 #define MyAppName "LayoutFlag"
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.1"
 #define MyAppPublisher "LayoutFlag"
 #define MyAppExeName "LayoutFlag.exe"
 
@@ -26,6 +26,7 @@ CloseApplications=yes
 CloseApplicationsFilter={#MyAppExeName}
 RestartApplications=no
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\ico\LayoutFlag.ico
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 AllowNoIcons=yes
@@ -58,11 +59,16 @@ Name: "{group}\{cm:UninstallShortcut}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
+; Тот же ключ использует пункт меню «Автозапуск» в самом приложении
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: autostart
+; Удаляем значение при деинсталляции, даже если автозапуск включали из меню приложения
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "{#MyAppName}"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "--lang={language}"; Description: "{cm:LaunchApp}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
+; Ярлык автозапуска из версий ≤1.2.0
+Type: files; Name: "{userstartup}\{#MyAppName}.lnk"
 Type: filesandordirs; Name: "{userappdata}\LayoutFlag"
 Type: filesandordirs; Name: "{localappdata}\LayoutFlag"

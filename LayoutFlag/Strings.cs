@@ -29,7 +29,7 @@ public sealed record UiStrings(
 
 public static class Strings
 {
-    public const string Version = "1.2.0";
+    public const string Version = "1.2.1";
     public const string RepositoryUrl = "https://github.com/thejohnd0e/LayoutFlag";
 
     private static readonly UiStrings Russian = new(
