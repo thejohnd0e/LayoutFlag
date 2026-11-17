@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -99,6 +100,65 @@ public class BadgeWindow : Form
         base.OnMouseClick(e);
     }
 
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+
+        // Системный цикл перемещения (WM_NCLBUTTONDOWN + HTCAPTION) при отпускании вставляет окно
+        // над окном под курсором — флажок уходит из topmost-полосы и остаётся за окнами.
+        if (m.Msg == NativeMethods.WM_EXITSIZEMOVE)
+        {
+            EnsureTopMost();
+        }
+    }
+
+    /// <summary>Возвращает окно в topmost-полосу, не трогая размер, позицию и активацию.</summary>
+    public void EnsureTopMost()
+    {
+        if (!IsHandleCreated) return;
+
+        NativeMethods.SetWindowPos(
+            Handle,
+            NativeMethods.HWND_TOPMOST,
+            0, 0, 0, 0,
+            NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE |
+            NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOOWNERZORDER);
+    }
+
+    /// <summary>
+    /// Страховка по таймеру: поднимает окно только если выше него оказалось видимое обычное окно,
+    /// чтобы не лезть поверх меню Пуск, Alt-Tab и чужих always-on-top окон без нужды.
+    /// </summary>
+    public void KeepOnTop()
+    {
+        if (!IsHandleCreated || !IsBuried()) return;
+        EnsureTopMost();
+    }
+
+    private bool IsBuried() => TopMostPolicy.IsBuried(EnumerateWindowsAbove());
+
+    private List<ZOrderEntry> EnumerateWindowsAbove()
+    {
+        var windows = new List<ZOrderEntry>(TopMostPolicy.MaxScanDepth);
+        IntPtr current = NativeMethods.GetWindow(Handle, NativeMethods.GW_HWNDPREV);
+
+        while (current != IntPtr.Zero && windows.Count < TopMostPolicy.MaxScanDepth)
+        {
+            bool visible = NativeMethods.IsWindowVisible(current);
+            bool topMost =
+                (NativeMethods.GetWindowLongPtr(current, NativeMethods.GWL_EXSTYLE).ToInt64() &
+                 NativeMethods.WS_EX_TOPMOST) != 0;
+            windows.Add(new ZOrderEntry(visible, topMost));
+
+            // Первое видимое topmost-окно уже ответило на вопрос — глубже смотреть незачем
+            if (visible && topMost) break;
+
+            current = NativeMethods.GetWindow(current, NativeMethods.GW_HWNDPREV);
+        }
+
+        return windows;
+    }
+
     protected override void OnLocationChanged(EventArgs e)
     {
         base.OnLocationChanged(e);
@@ -137,6 +197,7 @@ public class BadgeWindow : Form
             _restoringPosition = false;
         }
         RenderToLayeredWindow();
+        EnsureTopMost();
     }
 
     private void ClampLocation()

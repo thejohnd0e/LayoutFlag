@@ -23,6 +23,10 @@ public class TrayAppContext : ApplicationContext
 
     private FlagId _current = FlagId.Unknown;
     private bool _disposed;
+    private int _pollTicks;
+
+    /// <summary>10 тиков по 100 мс — проверка topmost-полосы примерно раз в секунду.</summary>
+    private const int TopMostWatchdogTicks = 10;
 
     private ToolStripMenuItem _countMenu = null!;
     private ToolStripMenuItem _count1Item = null!;
@@ -94,8 +98,25 @@ public class TrayAppContext : ApplicationContext
         PollLayout();
 
         _pollTimer.Interval = 100;
-        _pollTimer.Tick += (s, e) => PollLayout();
+        _pollTimer.Tick += (s, e) =>
+        {
+            PollLayout();
+            if (++_pollTicks >= TopMostWatchdogTicks)
+            {
+                _pollTicks = 0;
+                KeepBadgesOnTop();
+            }
+        };
         _pollTimer.Start();
+    }
+
+    /// <summary>Проверка «не спрятался ли флажок за окнами» — раз в секунду, дёшево.</summary>
+    private void KeepBadgesOnTop()
+    {
+        foreach (var win in _windows)
+        {
+            win.KeepOnTop();
+        }
     }
 
     private void PollLayout()
@@ -158,6 +179,7 @@ public class TrayAppContext : ApplicationContext
             };
             _windows.Add(win);
             win.Show();
+            win.EnsureTopMost();
         }
 
         while (_windows.Count > target)

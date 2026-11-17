@@ -20,6 +20,25 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     internal static extern IntPtr SendMessage(IntPtr hWnd, int nMsg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern bool SetWindowPos(
+        IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll")]
+    internal static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+    private static extern int GetWindowLong32(IntPtr hWnd, int nIndex);
+
+    internal static IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex) =>
+        IntPtr.Size == 8 ? GetWindowLongPtr64(hWnd, nIndex) : new IntPtr(GetWindowLong32(hWnd, nIndex));
+
     [DllImport("user32.dll")]
     internal static extern bool DestroyIcon(IntPtr hIcon);
 
@@ -51,6 +70,17 @@ internal static class NativeMethods
     internal const int ULW_ALPHA = 0x02;
     internal const byte AC_SRC_OVER = 0x00;
     internal const byte AC_SRC_ALPHA = 0x01;
+
+    internal const int WM_EXITSIZEMOVE = 0x0232;
+    internal const int GWL_EXSTYLE = -20;
+    internal const long WS_EX_TOPMOST = 0x8;
+    internal const uint GW_HWNDPREV = 3;
+    internal static readonly IntPtr HWND_TOPMOST = new(-1);
+
+    internal const uint SWP_NOSIZE = 0x0001;
+    internal const uint SWP_NOMOVE = 0x0002;
+    internal const uint SWP_NOACTIVATE = 0x0010;
+    internal const uint SWP_NOOWNERZORDER = 0x0200;
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct POINT
